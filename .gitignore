@@ -1,0 +1,24 @@
+# Kbuild output
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+*.order
+*.symvers
+.tmp_versions/
+
+# Userspace build output
+*.a
+*.so
+
+# VM images and kernel trees live in ~/skiff-work, never in the repo
+*.img
+*.qcow2
+*.iso
+*.tar.xz
+
+/*.md
+!/README.md
+
+docs/roadmap.md
