@@ -1,20 +1,20 @@
 # Hello, World
 
-First of all, the main goal here is to be out-of-tree kernel module that we will attach using `sudo insmod` and detach using `sudo rmmod` inside the kernel. A complete guide to build external modules can be found in `linux-6.18.58/Documentation/kbuild/modules.rst`. 
+In this first section, the main goal here is to build an out-of-tree kernel module that can be attached using `sudo insmod` and detached using `sudo rmmod` inside the kernel. A complete guide to build external modules can be found in `linux-6.18.58/Documentation/kbuild/modules.rst`. 
 
-## Kbuild
+## `Kbuild`
 
-To build the module, we will first need to specify the *recipe*. This *recipe* will be reflected on a Kbuild file. You can read in more detail on how to combine this with a Makefile as well in the complete guide. 
+To build the module, we will first need to specify the *recipe*. This *recipe* will be reflected on a Kbuild file. You can read in more detail on how to combine this with a `Makefile` as well in the complete guide. 
 
 When building the driver module, you need to link the driver object (`.o` file) with the kernel module. You can specify it using the following command:
 
 ```bash
-make -C ~/build M=$PWD
+make -C ~/skiff-work/build M=$PWD
 ```
 
-where `~/build` is the directory that contains built kernel, what you will found after running `build-kernel.sh`. 
+where `~/skiff-work/build` is the directory that contains built kernel, what you will found after running `build-kernel.sh`. 
 
-> Notes: You will need to run this inside the `module` directory. 
+> Notes: You will need to run this `make` command inside the `module` directory. 
 
 To transfer the `.ko` file to the VM, you can use the `ssh-guest.sh` script as follows:
 
@@ -22,7 +22,7 @@ To transfer the `.ko` file to the VM, you can use the `ssh-guest.sh` script as f
 scripts/ssh-guest.sh 'cat > skiff.ko' < module/skiff.ko
 ```
 
-## Inside the Module
+## Inside the module
 
 Overall, when `insmod` is run, `module_init` function will be invoked; when `rmmod` is run, `module_exit` function will be invoked. `__init` specifies that the function will only be invoked once in the initialization process, so the memory occupied by the function will be freed. 
 
