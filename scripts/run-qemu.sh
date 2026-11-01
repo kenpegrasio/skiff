@@ -14,8 +14,11 @@ KBUILD=${KBUILD:-$WORK/build}
 GUEST=${GUEST:-$WORK/guest}
 MEM=${MEM:-2G}
 CPUS=${CPUS:-2}
+TAP=${TAP:-skiff0}
+EXP_MAC=${EXP_MAC:-52:54:00:5c:1f:01}
 
 [[ -f $GUEST/guest.qcow2 ]] || { echo "no guest disk: run scripts/make-guest.sh first" >&2; exit 1; }
+ip link show "$TAP" &>/dev/null || { echo "no tap $TAP: run sudo scripts/tap-up.sh first" >&2; exit 1; }
 
 wait_gdb=()
 [[ ${1:-} == --wait ]] && wait_gdb=(-S)
@@ -38,6 +41,13 @@ args=(
 	# Host 127.0.0.1:2222 is forwarded to guest port 22 (SSH).
 	-netdev user,id=mgmt,hostfwd=tcp:127.0.0.1:2222-:22
 	-device e1000,netdev=mgmt
+
+	# Experiment NIC: the card skiff drives. disable-modern=on leaves only the legacy
+	# virtio interface: PCI ID 1af4:1000, registers in I/O-port BAR0. Its cable is
+	# the host tap from tap-up.sh (script=no: QEMU leaves the tap's setup alone).
+	# Listed after the e1000 so the e1000 keeps its PCI slot and interface name.
+	-netdev "tap,id=exp,ifname=$TAP,script=no,downscript=no"
+	-device "virtio-net-pci,netdev=exp,disable-modern=on,mac=$EXP_MAC"
 
 	# No window: the guest's serial port is this terminal.
 	-nographic
