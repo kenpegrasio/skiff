@@ -2,13 +2,13 @@
 
 ## Boot Workflow
 
-### I. Normal dual boot
+### Normal dual boot
 
 In standard dual boot workflow, we will first start by flashing a disk image (`.img`) file onto a USB stick. This disk image contains all the necessary file for a minimal computer to work. 
 
 While installing, all the content inside the disk image will be copied to the computer's disk. Every boot process after that will find the GRUB (bootloader) in SSD and mount the Ubuntu partition from the SSD. 
 
-### II. VM
+### VM
 
 In this project, the normal dual boot process will not work. Whenever there is a bug, the whole computer will crash. You have no way to debug and need to reflash the new disk image every time. Because of this, we will use QEMU to help us. 
 
