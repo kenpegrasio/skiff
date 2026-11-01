@@ -1,4 +1,4 @@
-# Skiff Concepts
+# Booting
 
 ## Boot Workflow
 
@@ -111,20 +111,3 @@ noble.raw16  227328 2097152 1869825  913M Linux extended boot
 
 Partition table entries are not in disk order.
 ```
-
-## GDB
-
-GDB stands for GNU Project Debugger. The most useful thing is: it allows you to freeze the VM and backtrace the state of the CPU. 
-
-Useful commands in gdb:
-
-```bash
-info threads     # one "thread" per virtual CPU; you should see 2
-bt               # backtrace: the chain of functions that led to where CPU 0 is now
-lx-dmesg         # the guest's kernel log, read directly out of its memory
-continue         # unfreeze the VM
-```
-
-Other commands: Ctrl + C to freeze again, quit to detach the GDB. 
-
-In our project, to attach the GDB to the guest, you can run the `gdb-guest.sh` script. 
