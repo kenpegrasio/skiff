@@ -40,8 +40,24 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
     iowrite8(status, status_loc);
 
     void __iomem *host_feature_loc = ioaddr + VIRTIO_PCI_HOST_FEATURES;
-    u32 feat = ioread32(host_feature_loc);
-    if (feat & (1u << VIRTIO_NET_F_MAC)) {
+    u32 host_feat = ioread32(host_feature_loc);
+    unsigned long host_bits = host_feat;
+    dev_info(&dev->dev, "Offered feature: %*pbl\n", 32, &host_bits);
+    u32 guest_feat = 0;
+    guest_feat |= (1u << VIRTIO_NET_F_MAC);
+    void __iomem *guest_feature_loc = ioaddr + VIRTIO_PCI_GUEST_FEATURES;
+    u32 used_feat = guest_feat & host_feat;
+    unsigned long used_bits = used_feat;
+    iowrite32(used_feat, guest_feature_loc);
+    dev_info(&dev->dev, "Accepted feature: %*pbl\n", 32, &used_bits);
+
+    {
+        u32 read_back = ioread32(guest_feature_loc);
+        unsigned long read_back_bits = read_back;
+        dev_info(&dev->dev, "Read back feature: %*pbl\n", 32, &read_back_bits);
+    }
+
+    if (used_feat & (1u << VIRTIO_NET_F_MAC)) {
         void __iomem *conf_loc = ioaddr + VIRTIO_PCI_CONFIG_OFF(false);
         u8 mac_addr[6];
         for (int i = 0; i < 6; i++) {
