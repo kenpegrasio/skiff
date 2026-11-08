@@ -1,0 +1,50 @@
+name: Deploy MkDocs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    # Only rebuild the site when the docs (or this workflow) change,
+    # not on every driver commit.
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    env:
+      # Silence Material's end-of-life banner in the build log.
+      NO_MKDOCS_2_WARNING: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - run: pip install mkdocs-material
+
+      # --strict turns warnings (broken links, missing images) into errors,
+      # so a bad page fails the build instead of deploying broken.
+      - run: mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/
+
+      - uses: actions/deploy-pages@v5
+        id: deployment
