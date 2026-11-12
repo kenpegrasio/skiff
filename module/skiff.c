@@ -7,10 +7,19 @@
 #include <linux/virtio_pci.h>
 #include <linux/virtio_config.h>
 #include <linux/virtio_net.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 
 #define ALIGNMENT 4096
 
-void __iomem *ioaddr;
+struct skiff_dev 
+{
+    void __iomem *ioaddr;
+    void *cpu_addr_0;
+    void *cpu_addr_1;
+    unsigned int queue_size_0;
+    unsigned int queue_size_1;
+};
 
 static inline unsigned align(unsigned int x) 
 {
@@ -24,6 +33,15 @@ static inline unsigned virtq_size(unsigned int qsz)
 
 static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id) 
 {
+    struct skiff_dev *priv;
+    struct net_device *net_dev = devm_alloc_etherdev(&dev->dev, sizeof(struct skiff_dev));
+    if (net_dev == NULL) {
+        dev_err(&dev->dev, "Failed to allocate net_device\n");
+        return -ENOMEM;
+    }
+    pci_set_drvdata(dev, net_dev);
+    priv = netdev_priv(net_dev);
+
     dev_info(&dev->dev, "Probe from Skiff\n");
     int ena = pcim_enable_device(dev); // see pci.rst line 197
     if (ena != 0) {
@@ -36,14 +54,14 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
         dev_err(&dev->dev, "Failed to request BAR0 region\n");
         return req;
     }
-    ioaddr = pcim_iomap(dev, 0, 0);
-    if (ioaddr == NULL) {
+    priv->ioaddr = pcim_iomap(dev, 0, 0);
+    if (priv->ioaddr == NULL) {
         dev_err(&dev->dev, "Failed to map BAR0\n");
         return -ENOMEM;
     }
     dev_info(&dev->dev, "BAR0 mapped\n"); 
 
-    void __iomem *status_loc = ioaddr + VIRTIO_PCI_STATUS;
+    void __iomem *status_loc = priv->ioaddr + VIRTIO_PCI_STATUS;
     iowrite8(0, status_loc); // reset
     u8 status = ioread8(status_loc);
     status |= VIRTIO_CONFIG_S_ACKNOWLEDGE; // set ACKNOWLEDGE
@@ -51,13 +69,13 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
     status |= VIRTIO_CONFIG_S_DRIVER; // set DRIVER
     iowrite8(status, status_loc);
 
-    void __iomem *host_feature_loc = ioaddr + VIRTIO_PCI_HOST_FEATURES;
+    void __iomem *host_feature_loc = priv->ioaddr + VIRTIO_PCI_HOST_FEATURES;
     u32 host_feat = ioread32(host_feature_loc);
     unsigned long host_bits = host_feat;
     dev_info(&dev->dev, "Offered feature: %*pbl\n", 32, &host_bits);
     u32 guest_feat = 0;
     guest_feat |= (1u << VIRTIO_NET_F_MAC);
-    void __iomem *guest_feature_loc = ioaddr + VIRTIO_PCI_GUEST_FEATURES;
+    void __iomem *guest_feature_loc = priv->ioaddr + VIRTIO_PCI_GUEST_FEATURES;
     u32 used_feat = guest_feat & host_feat;
     unsigned long used_bits = used_feat;
     iowrite32(used_feat, guest_feature_loc);
@@ -79,9 +97,9 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
     }
 
     // Virtqueues 
-    void __iomem *queue_select_loc = ioaddr + VIRTIO_PCI_QUEUE_SEL;
-    void __iomem *queue_size_loc = ioaddr + VIRTIO_PCI_QUEUE_NUM;
-    void __iomem *queue_address_loc = ioaddr + VIRTIO_PCI_QUEUE_PFN;
+    void __iomem *queue_select_loc = priv->ioaddr + VIRTIO_PCI_QUEUE_SEL;
+    void __iomem *queue_size_loc = priv->ioaddr + VIRTIO_PCI_QUEUE_NUM;
+    void __iomem *queue_address_loc = priv->ioaddr + VIRTIO_PCI_QUEUE_PFN;
 
     // 0
     iowrite16(0, queue_select_loc);
@@ -90,6 +108,7 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
         dev_err(&dev->dev, "Queue select 0 is empty\n");
         return -EIO;
     }
+    priv->queue_size_0 = queue_size_0;
     dev_info(&dev->dev, "Queue 0 entries: %d\n", queue_size_0);
     unsigned int aligned_queue_size_0 = virtq_size(queue_size_0);
     dma_addr_t dma_handle_0;
@@ -98,6 +117,7 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
         dev_err(&dev->dev, "Failed to allocate DMA coherent memory for queue 0\n");
         return -ENOMEM;
     }
+    priv->cpu_addr_0 = cpu_addr_0;
     u32 addr_0 = dma_handle_0 >> 12;
     dev_info(&dev->dev, "DMA handle 0: %x\n", addr_0);
     iowrite32(addr_0, queue_address_loc);
@@ -114,6 +134,7 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
         iowrite8(0, status_loc); // reset
         return -EIO;
     }
+    priv->queue_size_1 = queue_size_1;
     dev_info(&dev->dev, "Queue 1 entries: %d\n", queue_size_1);
     unsigned int aligned_queue_size_1 = virtq_size(queue_size_1);
     dma_addr_t dma_handle_1;
@@ -123,6 +144,7 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
         iowrite8(0, status_loc); // reset
         return -ENOMEM;
     }
+    priv->cpu_addr_1 = cpu_addr_1;
     u32 addr_1 = dma_handle_1 >> 12;
     dev_info(&dev->dev, "DMA handle 1: %x\n", addr_1);
     iowrite32(addr_1, queue_address_loc);
@@ -132,7 +154,7 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
     }
 
     if (used_feat & (1u << VIRTIO_NET_F_MAC)) {
-        void __iomem *conf_loc = ioaddr + VIRTIO_PCI_CONFIG_OFF(false);
+        void __iomem *conf_loc = priv->ioaddr + VIRTIO_PCI_CONFIG_OFF(false);
         u8 mac_addr[6];
         for (int i = 0; i < 6; i++) {
             mac_addr[i] = ioread8(conf_loc);
@@ -155,8 +177,11 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 static void skiff_remove(struct pci_dev *dev) 
 {
+    struct net_device *net_dev = pci_get_drvdata(dev);
+    struct skiff_dev *priv = netdev_priv(net_dev);
+
     dev_info(&dev->dev, "Remove from Skiff\n");
-    void __iomem *status_loc = ioaddr + VIRTIO_PCI_STATUS;
+    void __iomem *status_loc = priv->ioaddr + VIRTIO_PCI_STATUS;
     iowrite8(0, status_loc); // reset
 
     pci_clear_master(dev);

@@ -49,6 +49,12 @@ args=(
 	-netdev "tap,id=exp,ifname=$TAP,script=no,downscript=no"
 	-device "virtio-net-pci,netdev=exp,disable-modern=on,mac=$EXP_MAC"
 
+	# Second experiment NIC (optional): same legacy card, its own MAC.
+	# user-net "cable" so no second tap or sudo is needed; restrict=on keeps it
+	# off the internet. Probe/remove don't care what the cable is.
+	-netdev user,id=exp2,restrict=on
+	-device "virtio-net-pci,netdev=exp2,disable-modern=on,mac=52:54:00:5c:1f:02"
+
 	# No window: the guest's serial port is this terminal.
 	-nographic
 

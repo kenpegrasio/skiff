@@ -7,7 +7,7 @@
 #   DEV=0000:00:04.0 DRIVER=skiff   defaults; override either one
 set -euo pipefail
 
-DEV=${DEV:-0000:00:04.0}
+DEV=${DEV:-0000:00:05.0}
 DRIVER=${DRIVER:-skiff}
 
 case "${1:-}" in
