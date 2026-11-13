@@ -31,6 +31,22 @@ static inline unsigned virtq_size(unsigned int qsz)
     return align(16 * qsz + 6 + 2 * qsz) + align(6 + 8 * qsz); 
 }
 
+static int skiff_open(struct net_device *dev)
+{
+    return 0;
+}
+
+static int skiff_close(struct net_device *dev)
+{
+    return 0;
+}
+
+static netdev_tx_t skiff_start_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+    dev_kfree_skb_any(skb);
+    return NETDEV_TX_OK;
+}
+
 static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id) 
 {
     struct skiff_dev *priv;
@@ -161,6 +177,8 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
             conf_loc++;
         }
         dev_info(&dev->dev, "Device mac address is %pM\n", mac_addr);
+        eth_hw_addr_set(net_dev, mac_addr); // 5.1.4.2
+                                            // If the driver negotiates the VIRTIO_NET_F_MAC feature, the driver MUST set the physical address of the NIC to mac
     } else {
         dev_info(&dev->dev, "VIRTIO_NET_F_MAC is not set\n");
     }
@@ -172,6 +190,26 @@ static int skiff_probe(struct pci_dev *dev, const struct pci_device_id *id)
         u8 read_back = ioread8(status_loc);
         dev_info(&dev->dev, "Read back status: %x\n", read_back);
     }
+
+    static const struct net_device_ops skiff_netdev_ops = {
+        .ndo_open = skiff_open,
+        .ndo_stop = skiff_close,
+        .ndo_start_xmit = skiff_start_xmit,
+    };
+
+    net_dev->netdev_ops = &skiff_netdev_ops;
+    SET_NETDEV_DEV(net_dev, &dev->dev);
+    int reg = register_netdev(net_dev);
+    if (reg) 
+    {
+        dev_err(&dev->dev, "Failed to register network device\n");
+        iowrite8(0, status_loc); // reset
+        return reg;
+    }
+    netif_carrier_off(net_dev);
+    netif_carrier_on(net_dev);
+    // Whenever the driver CHANGES one of these flags, a workqueue event is
+    // scheduled to translate the flag combination to IFLA_OPERSTATE
     return 0;
 }
 
@@ -179,6 +217,8 @@ static void skiff_remove(struct pci_dev *dev)
 {
     struct net_device *net_dev = pci_get_drvdata(dev);
     struct skiff_dev *priv = netdev_priv(net_dev);
+
+    unregister_netdev(net_dev);
 
     dev_info(&dev->dev, "Remove from Skiff\n");
     void __iomem *status_loc = priv->ioaddr + VIRTIO_PCI_STATUS;
